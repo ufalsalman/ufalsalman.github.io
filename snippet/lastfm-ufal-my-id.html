@@ -1,0 +1,187 @@
+<style>
+  .now-playing {
+    font-family: Inter, sans-serif;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    max-width: 320px;
+    border-radius: 10px;
+    gap: 10px;
+  }
+
+  #albumLink {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  #albumArt {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+
+  .info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    overflow: hidden;
+    flex: 1;
+  }
+
+  .now-playing-label {
+    font-size: 10px;
+    color: white;
+    margin-bottom: 2px;
+    font-weight: bold;
+  }
+
+  /* === Marquee === */
+  .scroll-rail {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .scroll-track {
+    display: inline-flex;
+    align-items: center;
+    gap: 32px;
+    will-change: transform;
+  }
+
+  .marquee-running {
+    animation: marquee linear infinite;
+  }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(-1 * var(--marquee-distance))); }
+  }
+
+  .scroll-text {
+    display: inline-block;
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 16px;
+    line-height: 1.2em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #trackMeta {
+    color: #cacaca;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+
+<div class="now-playing" id="nowPlaying" style="display:none">
+  <a href="https://last.fm/user/ufalsalman" id="albumLink">
+    <img decoding="async" src="" alt="Album Art" id="albumArt" />
+  </a>
+
+  <div class="info">
+    <div class="now-playing-label">Now Playing</div>
+
+    <div class="scroll-rail" id="titleRail">
+      <div class="scroll-track" id="titleTrack">
+        <span id="trackTitle" class="scroll-text">Memuat…</span>
+      </div>
+    </div>
+
+    <div id="trackMeta"></div>
+  </div>
+</div>
+
+<script>
+  const username = "ufalsalman";
+  const apiKey = "b0e1ac4a986516b158318d31242bdf3f";
+
+  const SPEED_PX_PER_S = 60;
+
+  function setupMarquee(el) {
+    const rail = el.closest('.scroll-rail');
+    const track = rail.querySelector('.scroll-track');
+
+    // Bersihkan clone lama
+    [...track.children].forEach((child, i) => {
+      if (i > 0) child.remove();
+    });
+
+    track.classList.remove('marquee-running');
+    track.style.removeProperty('--marquee-distance');
+    track.style.animationDuration = '0s';
+    track.style.transform = 'translateX(0)';
+
+    const needsScroll = el.scrollWidth > rail.clientWidth;
+    if (!needsScroll) return;
+
+    const clone = el.cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    track.appendChild(clone);
+
+    const distance = el.scrollWidth + 32;
+    track.style.setProperty('--marquee-distance', distance + 'px');
+    const duration = distance / SPEED_PX_PER_S;
+    track.style.animationDuration = duration + 's';
+
+    track.classList.add('marquee-running');
+  }
+
+  function debounce(fn, t = 150) {
+    let id; return (...args) => {
+      clearTimeout(id); id = setTimeout(() => fn(...args), t);
+    };
+  }
+
+  async function getNowPlaying() {
+    try {
+      const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${username}&api_key=${apiKey}&format=json&limit=1`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const track = data.recenttracks.track?.[0];
+
+      const isPlaying = track?.['@attr']?.nowplaying === "true";
+
+      const albumArt = document.getElementById("albumArt");
+      const albumLink = document.getElementById("albumLink");
+      const nowPlayingBox = document.getElementById("nowPlaying");
+      const trackTitle = document.getElementById("trackTitle");
+      const trackMeta = document.getElementById("trackMeta");
+
+      if (isPlaying) {
+        trackTitle.textContent = track.name;
+
+        const artist = track.artist['#text'] || "";
+        const album = track.album['#text'] || "";
+        trackMeta.textContent = album ? `${artist} - ${album}` : artist;
+
+        albumArt.src = track.image[3]['#text'] || track.image[2]['#text'] || '';
+        albumArt.style.display = "block";
+        albumLink.style.display = "block";
+
+        nowPlayingBox.style.display = "flex";
+
+        setupMarquee(trackTitle);
+      } else {
+        nowPlayingBox.style.display = "none";
+      }
+    } catch (e) {
+      console.error("Gagal memuat data dari Last.fm:", e);
+      document.getElementById("trackTitle").textContent = "Gagal memuat data";
+    }
+  }
+
+  getNowPlaying();
+  setInterval(getNowPlaying, 15000);
+
+  window.addEventListener('resize', debounce(() => {
+    const el = document.getElementById('trackTitle');
+    setupMarquee(el);
+  }, 200));
+</script>
